@@ -1,0 +1,85 @@
+name: Post to Instagram
+
+on:
+  schedule:
+    # UTC times. Nepal = UTC+5:45. Reels at 02:45, 12:45, 15:45.
+    - cron: '45 0 * * *'
+    - cron: '45 2 * * *'
+    - cron: '45 4 * * *'
+    - cron: '45 6 * * *'
+    - cron: '45 8 * * *'
+    - cron: '45 10 * * *'
+    - cron: '45 12 * * *'
+    - cron: '15 14 * * *'
+    - cron: '45 15 * * *'
+    - cron: '15 17 * * *'
+  workflow_dispatch:
+    inputs:
+      reel:
+        description: 'Make a Reel instead of a card'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repo-state
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      IG_HANDLE: ${{ vars.IG_HANDLE }}
+      IG_BRAND: ${{ vars.IG_BRAND }}
+      CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+      REEL: ${{ (github.event.schedule == '45 2 * * *' || github.event.schedule == '45 12 * * *' || github.event.schedule == '45 15 * * *' || inputs.reel) && '--reel' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libraqm0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare post
+        run: python -m bot.main prepare $REEL
+
+      - name: Upload media (so Instagram can fetch it)
+        run: |
+          git add media state
+          if git diff --cached --quiet; then echo "Nothing to upload"; exit 0; fi
+          git commit -q -m "media: $(date -u +%Y%m%d-%H%M)"
+          git pull -q --rebase && git push -q
+          sleep 20
+
+      - name: Publish
+        run: python -m bot.main publish
+
+      - name: Clean old media
+        if: always()
+        run: python -m bot.main cleanup
+
+      - name: Save state
+        if: always()
+        run: |
+          git add -A media state
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git commit -q -m "state: $(date -u +%Y%m%d-%H%M)"
+          git pull -q --rebase && git push -q
