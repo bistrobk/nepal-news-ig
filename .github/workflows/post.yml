@@ -2,21 +2,33 @@ name: Post to Instagram
 
 on:
   schedule:
-    # UTC times. Nepal = UTC+5:45. Reels at 02:45, 12:45, 15:45.
-    - cron: '45 0 * * *'
-    - cron: '45 2 * * *'
-    - cron: '45 4 * * *'
-    - cron: '45 6 * * *'
-    - cron: '45 8 * * *'
-    - cron: '45 10 * * *'
-    - cron: '45 12 * * *'
+    # UTC times. Nepal = UTC+5:45. One post every hour, 06:00-21:00 Nepal time (16 a day).
+    # Reels at 08:00, 18:00 and 21:00 Nepal time. Daily summary at 20:30 Nepal time (14:45 UTC).
+    - cron: '15 0 * * *'
+    - cron: '15 1 * * *'
+    - cron: '15 2 * * *'
+    - cron: '15 3 * * *'
+    - cron: '15 4 * * *'
+    - cron: '15 5 * * *'
+    - cron: '15 6 * * *'
+    - cron: '15 7 * * *'
+    - cron: '15 8 * * *'
+    - cron: '15 9 * * *'
+    - cron: '15 10 * * *'
+    - cron: '15 11 * * *'
+    - cron: '15 12 * * *'
+    - cron: '15 13 * * *'
     - cron: '15 14 * * *'
-    - cron: '45 15 * * *'
-    - cron: '15 17 * * *'
+    - cron: '15 15 * * *'
+    - cron: '45 14 * * *'
   workflow_dispatch:
     inputs:
       reel:
         description: 'Make a Reel instead of a card'
+        type: boolean
+        default: false
+      digest:
+        description: 'Post the daily summary'
         type: boolean
         default: false
 
@@ -38,7 +50,8 @@ jobs:
       IG_HANDLE: ${{ vars.IG_HANDLE }}
       IG_BRAND: ${{ vars.IG_BRAND }}
       CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
-      REEL: ${{ (github.event.schedule == '45 2 * * *' || github.event.schedule == '45 12 * * *' || github.event.schedule == '45 15 * * *' || inputs.reel) && '--reel' || '' }}
+      REEL: ${{ (github.event.schedule == '15 2 * * *' || github.event.schedule == '15 12 * * *' || github.event.schedule == '15 15 * * *' || inputs.reel) && '--reel' || '' }}
+      DIGEST: ${{ (github.event.schedule == '45 14 * * *' || inputs.digest) && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +72,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Prepare post
-        run: python -m bot.main prepare $REEL
+        run: |
+          if [ -n "$DIGEST" ]; then python -m bot.main digest; else python -m bot.main prepare $REEL; fi
 
       - name: Upload media (so Instagram can fetch it)
         run: |

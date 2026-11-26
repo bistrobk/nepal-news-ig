@@ -1,6 +1,7 @@
 """Entry point.
 
 python -m bot.main prepare [--reel]   pick a story, draw media, write state/pending.json
+python -m bot.main digest             today's summary card (evening), write state/pending.json
 python -m bot.main publish            post what prepare made, record it in state/posted.json
 python -m bot.main dry-run [--reel]   prepare only, nothing is saved to state
 python -m bot.main cleanup            delete media files older than KEEP_MEDIA_DAYS
@@ -9,7 +10,7 @@ python -m bot.main report             write state/report.md from Instagram insig
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from . import config, fetch, render
 
@@ -52,6 +53,41 @@ def prepare(reel=False, save=True):
     return post
 
 
+def digest(save=True):
+    """Evening 'Today in Nepal' card from what was posted earlier today (Nepal date)."""
+    from .summarize import write_digest
+    npt = timezone(timedelta(hours=5, minutes=45))
+    today = datetime.now(npt).date()
+    todays = [p for p in fetch.load_posted()
+              if datetime.fromisoformat(p["time"]).astimezone(npt).date() == today]
+    if any(p.get("type") == "digest" for p in todays):
+        print("Summary already posted today")
+        return None
+    entries = [p for p in todays if p.get("type") != "digest"]
+    if len(entries) < 3:
+        print(f"Only {len(entries)} posts today, no summary")
+        return None
+    out = write_digest(entries)
+    if not out or len(out["items"]) < 3:
+        print("No summary this run")
+        return None
+    config.MEDIA.mkdir(exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    img = config.MEDIA / f"{stamp}.jpg"
+    sources = len({p["source"] for p in entries})
+    render.digest_card(out["items"], img, sources)
+    post = {"type": "digest", "category": "Digest", "headline_en": "Today in Nepal",
+            "caption": out["caption"], "hashtags": out["hashtags"], "items": out["items"],
+            "story": {"source": config.BRAND, "link": ""}, "theme": "navy", "image": img.name}
+    print(f"Prepared summary of {len(out['items'])} stories")
+    if save:
+        config.STATE.mkdir(exist_ok=True)
+        config.PENDING_FILE.write_text(json.dumps(post, ensure_ascii=False, indent=1))
+    else:
+        print(caption_text(post))
+    return post
+
+
 def publish():
     from . import publish as ig
     if not config.PENDING_FILE.exists():
@@ -68,9 +104,10 @@ def publish():
     posted.append({
         "time": datetime.now(timezone.utc).isoformat(timespec="minutes"),
         "id": media_id,
-        "type": "reel" if post.get("video") else "image",
+        "type": post.get("type") or ("reel" if post.get("video") else "image"),
         "category": post["category"],
         "headline_en": post["headline_en"],
+        "headline_ne": post.get("headline_ne", ""),
         "source": post["story"]["source"],
         "link": post["story"]["link"],
     })
@@ -126,6 +163,8 @@ if __name__ == "__main__":
         prepare(reel)
     elif cmd == "dry-run":
         prepare(reel, save=False)
+    elif cmd == "digest":
+        digest(save="--dry" not in sys.argv)
     elif cmd == "publish":
         publish()
     elif cmd == "cleanup":

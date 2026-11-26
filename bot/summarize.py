@@ -47,7 +47,7 @@ SCHEMA = {
 
 
 def write_post(stories, posted):
-    recent = [p["headline_en"] for p in posted[-30:]]
+    recent = [p["headline_en"] for p in posted if p.get("type") != "digest"][-30:]
     cands = "\n\n".join(
         f"[{i}] {s['source']} ({s['age_h']} h ago)\nTitle: {s['title']}\nText: {s['summary']}"
         for i, s in enumerate(stories)
@@ -75,3 +75,45 @@ def write_post(stories, posted):
     post["story"] = stories[post["index"]]
     post["hashtags"] = [h.lstrip("#").replace(" ", "") for h in post["hashtags"]][:5]
     return post
+
+
+DIGEST_SYSTEM = """You write the evening "Today in Nepal" summary post for a neutral bilingual Nepali news
+Instagram account. You get the headlines the account posted today.
+- Pick the 5 or 6 most important, most different stories, most important first. Use only these headlines.
+- lines_en: each one a short plain line, max 9 words. No opinion, no new facts.
+- caption: hook line, then the stories as a short English list, then a short Nepali (Devanagari) list,
+  then one question to invite comments. No hashtags in caption.
+- hashtags: 4 tags, no '#', e.g. NepalNews, TodayInNepal.
+"""
+
+DIGEST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "picks": {"type": "array", "items": {"type": "integer"}},
+        "lines_en": {"type": "array", "items": {"type": "string"}},
+        "caption": {"type": "string"},
+        "hashtags": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["picks", "lines_en", "caption", "hashtags"],
+    "additionalProperties": False,
+}
+
+
+def write_digest(entries):
+    """entries: today's posted.json items. Returns lines, categories, caption, hashtags."""
+    listing = "\n".join(f"[{i}] ({e['category']}) {e['headline_en']}" for i, e in enumerate(entries))
+    resp = anthropic.Anthropic().messages.create(
+        model=config.MODEL,
+        max_tokens=3000,
+        system=DIGEST_SYSTEM,
+        messages=[{"role": "user", "content": f"Today's posts:\n{listing}"}],
+        output_config={"effort": "low",
+                       "format": {"type": "json_schema", "schema": DIGEST_SCHEMA}},
+    )
+    if resp.stop_reason == "refusal":
+        return None
+    out = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    items = [(entries[i]["category"], line) for i, line in zip(out["picks"], out["lines_en"])
+             if 0 <= i < len(entries)][:6]
+    return {"items": items, "caption": out["caption"],
+            "hashtags": [h.lstrip("#").replace(" ", "") for h in out["hashtags"]][:5]}

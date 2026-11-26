@@ -73,16 +73,12 @@ def rings(img, cx, cy, color, accent, scale=3):
     img.paste(layer, (0, 0), layer)
 
 
-def card(post, path, theme=None):
-    t = THEMES.get(theme or config.THEME, THEMES["navy"])
-    img = Image.new("RGB", (W, H), t["bg"])
-    rings(img, 968, 400, t["rings"], t["accent"])
+def header(img, label, t):
+    """Top row: LABEL | date            brand. Returns the draw object."""
     d = ImageDraw.Draw(img)
-
-    # top row: CATEGORY | date            brand
     top = 92
     cf = font("NotoSans.ttf", 25)
-    cw = spaced(d, (PAD, top), post["category"].upper(), cf, t["accent"], 5)
+    cw = spaced(d, (PAD, top), label.upper(), cf, t["accent"], 5)
     x = PAD + cw + 22
     d.line([x, top + 4, x, top + 30], fill=t["rule"], width=2)
     df = font("NotoSans.ttf", 23, "SemiBold")
@@ -94,6 +90,22 @@ def card(post, path, theme=None):
         bf = font("NotoSans.ttf", 34, "ExtraBold")
         mark, by = config.BRAND, top - 4
     d.text((W - PAD - d.textlength(mark, font=bf), by), mark, font=bf, fill=t["ink"])
+    return d
+
+
+def footer(d, left, t):
+    d.line([PAD, 1212, W - PAD, 1212], fill=t["rule"], width=2)
+    sf = font("NotoSans.ttf", 24, "Regular")
+    d.text((PAD, 1240), left, font=sf, fill=t["muted"])
+    hf = font("NotoSans.ttf", 27)
+    d.text((W - PAD - d.textlength(config.HANDLE, font=hf), 1237), config.HANDLE, font=hf, fill=t["ink"])
+
+
+def card(post, path, theme=None):
+    t = THEMES.get(theme or config.THEME, THEMES["navy"])
+    img = Image.new("RGB", (W, H), t["bg"])
+    rings(img, 968, 400, t["rings"], t["accent"])
+    d = header(img, post["category"], t)
 
     # headline: biggest size that fits in 4 lines, left of the rings
     hw = 730
@@ -125,13 +137,38 @@ def card(post, path, theme=None):
             y += lh
         y += gap
 
-    # footer
-    d.line([PAD, 1212, W - PAD, 1212], fill=t["rule"], width=2)
-    sf = font("NotoSans.ttf", 24, "Regular")
-    d.text((PAD, 1240), f"Source: {post['story']['source']}", font=sf, fill=t["muted"])
-    hf = font("NotoSans.ttf", 27)
-    d.text((W - PAD - d.textlength(config.HANDLE, font=hf), 1237), config.HANDLE, font=hf, fill=t["ink"])
+    footer(d, f"Source: {post['story']['source']}", t)
+    img.save(path, "JPEG", quality=92)
+    return path
 
+
+def digest_card(items, path, sources, theme="navy"):
+    """Evening summary: big title, then up to 6 numbered stories (category, line)."""
+    t = THEMES[theme]
+    img = Image.new("RGB", (W, H), t["bg"])
+    rings(img, 968, 400, t["rings"], t["accent"])
+    d = header(img, "Daily summary", t)
+    tf = font("NotoSans.ttf", 88, "ExtraBold")
+    d.text((PAD, 205), "Today", font=tf, fill=t["ink"])
+    d.text((PAD, 304), "in Nepal", font=tf, fill=t["ink"])
+
+    nf = font("NotoSans.ttf", 40, "ExtraBold")
+    cf = font("NotoSans.ttf", 20)
+    lf = font("NotoSans.ttf", 32, "SemiBold")
+    y = 450
+    for n, (cat, line) in enumerate(items[:6], 1):
+        lines = wrap(d, line, lf, W - 2 * PAD - 80)[:2]
+        if y + 30 + len(lines) * 42 > 1185:
+            break
+        d.text((PAD, y + 8), f"{n:02d}", font=nf, fill=t["accent"])
+        spaced(d, (PAD + 80, y), cat.upper(), cf, t["muted"], 3)
+        yy = y + 30
+        for ln in lines:
+            d.text((PAD + 80, yy), ln, font=lf, fill=t["ink"])
+            yy += 42
+        y = yy + 26
+
+    footer(d, f"From {sources} sources", t)
     img.save(path, "JPEG", quality=92)
     return path
 
