@@ -73,6 +73,16 @@ def rings(img, cx, cy, color, accent, scale=3):
     img.paste(layer, (0, 0), layer)
 
 
+def nepali_date():
+    """Today's Bikram Sambat date in Devanagari, e.g. '१० मंसिर २०८३'. None if the package is missing."""
+    try:
+        import nepali_datetime
+        bs = nepali_datetime.date.from_datetime_date(datetime.now(NPT).date())
+        return bs.strftime("%D %N %K").lstrip("०")
+    except Exception:
+        return None
+
+
 def header(img, label, t):
     """Top row: LABEL | date            brand. Returns the draw object."""
     d = ImageDraw.Draw(img)
@@ -81,8 +91,13 @@ def header(img, label, t):
     cw = spaced(d, (PAD, top), label.upper(), cf, t["accent"], 5)
     x = PAD + cw + 22
     d.line([x, top + 4, x, top + 30], fill=t["rule"], width=2)
-    df = font("NotoSans.ttf", 23, "SemiBold")
-    d.text((x + 22, top + 2), datetime.now(NPT).strftime("%-d %b %Y").upper(), font=df, fill=t["muted"])
+    bs = nepali_date() if RAQM else None
+    if bs:
+        df = font("NotoSansDevanagari.ttf", 27, "SemiBold")
+        d.text((x + 22, top - 4), bs, font=df, fill=t["muted"])
+    else:  # fallback: English date, Nepal time
+        df = font("NotoSans.ttf", 23, "SemiBold")
+        d.text((x + 22, top + 2), datetime.now(NPT).strftime("%-d %b %Y").upper(), font=df, fill=t["muted"])
     if RAQM:
         bf = font("NotoSansDevanagari.ttf", 58, "ExtraBold")
         mark, by = "स्पर्श", top - 26
@@ -119,6 +134,15 @@ def card(post, path, theme=None):
     for ln in lines:
         d.text((PAD, y), ln, font=hf, fill=t["ink"])
         y += int(size * 1.12)
+
+    # Nepali headline under the English one (needs shaping)
+    ne = post.get("headline_ne", "") if RAQM else ""
+    if ne:
+        nf = font("NotoSansDevanagari.ttf", 46, "Bold")
+        y += 14
+        for ln in wrap(d, ne, nf, hw)[:2]:
+            d.text((PAD, y), ln, font=nf, fill=t["muted"])
+            y += 64
     head_end = y
 
     # points: right under the headline
@@ -148,25 +172,36 @@ def digest_card(items, path, sources, theme="navy"):
     img = Image.new("RGB", (W, H), t["bg"])
     rings(img, 968, 400, t["rings"], t["accent"])
     d = header(img, "Daily summary", t)
-    tf = font("NotoSans.ttf", 88, "ExtraBold")
-    d.text((PAD, 205), "Today", font=tf, fill=t["ink"])
-    d.text((PAD, 304), "in Nepal", font=tf, fill=t["ink"])
+    if RAQM:  # English title on one line, Nepali under it
+        d.text((PAD, 205), "Today in Nepal", font=font("NotoSans.ttf", 72, "ExtraBold"), fill=t["ink"])
+        d.text((PAD, 300), "आजको नेपाल", font=font("NotoSansDevanagari.ttf", 56, "Bold"), fill=t["muted"])
+    else:
+        tf = font("NotoSans.ttf", 88, "ExtraBold")
+        d.text((PAD, 205), "Today", font=tf, fill=t["ink"])
+        d.text((PAD, 304), "in Nepal", font=tf, fill=t["ink"])
 
-    nf = font("NotoSans.ttf", 40, "ExtraBold")
-    cf = font("NotoSans.ttf", 20)
-    lf = font("NotoSans.ttf", 32, "SemiBold")
-    y = 450
-    for n, (cat, line) in enumerate(items[:6], 1):
+    nf = font("NotoSans.ttf", 38, "ExtraBold")
+    cf = font("NotoSans.ttf", 19)
+    lf = font("NotoSans.ttf", 30, "SemiBold")
+    nef = font("NotoSansDevanagari.ttf", 27, "Medium")
+    y = 440
+    for n, item in enumerate(items[:6], 1):
+        cat, line = item[0], item[1]
+        ne = item[2] if len(item) > 2 and RAQM else ""  # Devanagari needs shaping
         lines = wrap(d, line, lf, W - 2 * PAD - 80)[:2]
-        if y + 30 + len(lines) * 42 > 1185:
+        ne_lines = wrap(d, ne, nef, W - 2 * PAD - 80)[:1] if ne else []
+        if y + 28 + len(lines) * 38 + len(ne_lines) * 38 > 1190:
             break
-        d.text((PAD, y + 8), f"{n:02d}", font=nf, fill=t["accent"])
+        d.text((PAD, y + 6), f"{n:02d}", font=nf, fill=t["accent"])
         spaced(d, (PAD + 80, y), cat.upper(), cf, t["muted"], 3)
-        yy = y + 30
+        yy = y + 28
         for ln in lines:
             d.text((PAD + 80, yy), ln, font=lf, fill=t["ink"])
-            yy += 42
-        y = yy + 26
+            yy += 38
+        for ln in ne_lines:
+            d.text((PAD + 80, yy - 2), ln, font=nef, fill=t["muted"])
+            yy += 38
+        y = yy + 18
 
     footer(d, f"From {sources} sources", t)
     img.save(path, "JPEG", quality=92)

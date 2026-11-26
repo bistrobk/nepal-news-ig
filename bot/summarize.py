@@ -80,7 +80,8 @@ def write_post(stories, posted):
 DIGEST_SYSTEM = """You write the evening "Today in Nepal" summary post for a neutral bilingual Nepali news
 Instagram account. You get the headlines the account posted today.
 - Pick the 5 or 6 most important, most different stories, most important first. Use only these headlines.
-- lines_en: each one a short plain line, max 9 words. No opinion, no new facts.
+- lines_en: each one a short plain line, max 8 words. No opinion, no new facts.
+- lines_ne: the same lines in Nepali (Devanagari), same order, max 8 words each.
 - caption: hook line, then the stories as a short English list, then a short Nepali (Devanagari) list,
   then one question to invite comments. No hashtags in caption.
 - hashtags: 4 tags, no '#', e.g. NepalNews, TodayInNepal.
@@ -91,10 +92,11 @@ DIGEST_SCHEMA = {
     "properties": {
         "picks": {"type": "array", "items": {"type": "integer"}},
         "lines_en": {"type": "array", "items": {"type": "string"}},
+        "lines_ne": {"type": "array", "items": {"type": "string"}},
         "caption": {"type": "string"},
         "hashtags": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["picks", "lines_en", "caption", "hashtags"],
+    "required": ["picks", "lines_en", "lines_ne", "caption", "hashtags"],
     "additionalProperties": False,
 }
 
@@ -113,7 +115,9 @@ def write_digest(entries):
     if resp.stop_reason == "refusal":
         return None
     out = json.loads(next(b.text for b in resp.content if b.type == "text"))
-    items = [(entries[i]["category"], line) for i, line in zip(out["picks"], out["lines_en"])
+    ne = out["lines_ne"] + [""] * len(out["lines_en"])
+    items = [(entries[i]["category"], en, ne[k])
+             for k, (i, en) in enumerate(zip(out["picks"], out["lines_en"]))
              if 0 <= i < len(entries)][:6]
     return {"items": items, "caption": out["caption"],
             "hashtags": [h.lstrip("#").replace(" ", "") for h in out["hashtags"]][:5]}
