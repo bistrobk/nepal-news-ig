@@ -31,7 +31,13 @@ def prepare(reel=False, save=True):
     config.MEDIA.mkdir(exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     img = config.MEDIA / f"{stamp}.jpg"
-    render.card(post, img)
+    theme = config.THEME
+    if theme == "topic":  # hard news on navy, lighter topics on light
+        theme = "navy" if post["category"] in config.NAVY_TOPICS else "light"
+    elif theme == "mix":  # alternate navy / light, one post each
+        theme = ("navy", "light")[len(posted) % 2]
+    render.card(post, img, theme)
+    post["theme"] = theme
     post["image"] = img.name
     if reel:
         vid = config.MEDIA / f"{stamp}.mp4"

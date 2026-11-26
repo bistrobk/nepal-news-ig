@@ -12,6 +12,8 @@ PENDING_FILE = STATE / "pending.json"
 # `or` so an empty GitHub variable falls back to the default
 HANDLE = os.environ.get("IG_HANDLE") or "@sparsha_np"
 BRAND = os.environ.get("IG_BRAND") or "SPARSHA"  # short name in the card's top-right corner
+THEME = os.environ.get("IG_THEME") or "topic"  # card colours: topic, mix (alternate), navy or light
+NAVY_TOPICS = {"Politics", "Economy", "World", "Business", "Weather"}  # the rest go on light
 MODEL = os.environ.get("CLAUDE_MODEL") or "claude-opus-5-5"  # cheaper: claude-haiku-5-5
 
 IG_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "")

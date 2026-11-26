@@ -1,6 +1,6 @@
 """Draw the 1080x1350 news card, and turn it into a short Reel video."""
 import subprocess
-import textwrap
+from datetime import datetime, timedelta, timezone
 
 from PIL import Image, ImageDraw, ImageFont, features
 
@@ -8,11 +8,15 @@ from . import config
 
 W, H = 1080, 1350
 PAD = 80
-BG = (14, 22, 38)
-ACCENT = (220, 20, 60)      # Nepal crimson
-WHITE = (245, 245, 245)
-GREY = (170, 180, 195)
 RAQM = features.check("raqm")  # needed to shape Devanagari correctly
+NPT = timezone(timedelta(hours=5, minutes=45))  # Nepal time, for the date on the card
+
+THEMES = {
+    "navy": dict(bg=(16, 21, 38), ink=(255, 255, 255), muted=(150, 158, 180),
+                 rule=(42, 49, 72), rings=(54, 62, 90), accent=(235, 72, 92)),
+    "light": dict(bg=(243, 244, 248), ink=(18, 22, 40), muted=(98, 104, 124),
+                  rule=(214, 217, 228), rings=(206, 210, 224), accent=(200, 30, 50)),
+}
 
 
 def font(name, size, weight="Bold"):
@@ -41,61 +45,93 @@ def wrap(draw, text, fnt, width):
     return lines
 
 
-def draw_block(draw, y, text, fnt, fill, width, gap=1.25, max_lines=4):
-    lines = wrap(draw, text, fnt, width)[:max_lines]
-    for ln in lines:
-        draw.text((PAD, y), ln, font=fnt, fill=fill)
-        y += int(fnt.size * gap)
-    return y
+def spaced(draw, xy, text, fnt, fill, track):
+    """Draw letter-spaced text, return its width."""
+    x, y = xy
+    for ch in text:
+        draw.text((x, y), ch, font=fnt, fill=fill)
+        x += draw.textlength(ch, font=fnt) + track
+    return x - track - xy[0]
 
 
-def card(post, path):
-    img = Image.new("RGB", (W, H), BG)
+def rings(img, cx, cy, color, accent, scale=3):
+    """Fingerprint-style broken ellipses ('sparsha' = touch), drawn large then shrunk for smooth edges."""
+    layer = Image.new("RGBA", (W * scale, H * scale), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    s = scale
+    # (radius, gap start, gap size) in degrees; Pillow angles go clockwise from 3 o'clock
+    spec = [(26, 200, 0), (46, 120, 40), (66, 250, 35), (88, 60, 30),
+            (110, 170, 45), (132, 300, 30), (156, 20, 40), (180, 220, 35)]
+    for r, g0, gap in spec:
+        box = [(cx - r) * s, (cy - r * 1.35) * s, (cx + r) * s, (cy + r * 1.35) * s]
+        if gap:
+            d.arc(box, g0 + gap, g0 + 360, fill=color, width=3 * s)
+        else:
+            d.ellipse(box, outline=color, width=3 * s)
+    d.ellipse([(cx - 8) * s, (cy - 8) * s, (cx + 8) * s, (cy + 8) * s], fill=accent)
+    layer = layer.resize((W, H), Image.LANCZOS)
+    img.paste(layer, (0, 0), layer)
+
+
+def card(post, path, theme=None):
+    t = THEMES.get(theme or config.THEME, THEMES["navy"])
+    img = Image.new("RGB", (W, H), t["bg"])
+    rings(img, 968, 352, t["rings"], t["accent"])
     d = ImageDraw.Draw(img)
-    width = W - 2 * PAD
-    nepali = RAQM
 
-    # top bar: category tag + brand
-    d.rectangle([0, 0, W, 14], fill=ACCENT)
-    tag = post["category"].upper()
-    tf = font("NotoSans.ttf", 34)
-    tw = d.textlength(tag, font=tf)
-    d.rounded_rectangle([PAD, 70, PAD + tw + 40, 124], radius=10, fill=ACCENT)
-    d.text((PAD + 20, 75), tag, font=tf, fill=WHITE)
-    bf = font("NotoSans.ttf", 34, "SemiBold")
-    d.text((W - PAD - d.textlength(config.BRAND, font=bf), 77), config.BRAND, font=bf, fill=GREY)
+    # top row: CATEGORY | date            brand
+    top = 92
+    cf = font("NotoSans.ttf", 25)
+    cw = spaced(d, (PAD, top), post["category"].upper(), cf, t["accent"], 5)
+    x = PAD + cw + 22
+    d.line([x, top + 4, x, top + 30], fill=t["rule"], width=2)
+    df = font("NotoSans.ttf", 23, "SemiBold")
+    d.text((x + 22, top + 2), datetime.now(NPT).strftime("%-d %b %Y").upper(), font=df, fill=t["muted"])
+    if RAQM:
+        bf = font("NotoSansDevanagari.ttf", 58, "ExtraBold")
+        mark, by = "स्पर्श", top - 26
+    else:  # no shaping library: Devanagari would break, use the Latin name
+        bf = font("NotoSans.ttf", 34, "ExtraBold")
+        mark, by = config.BRAND, top - 4
+    d.text((W - PAD - d.textlength(mark, font=bf), by), mark, font=bf, fill=t["ink"])
 
-    y = 190
-    if nepali:
-        y = draw_block(d, y, post["headline_ne"], font("NotoSansDevanagari.ttf", 74), WHITE, width, 1.4, 3)
-        y += 20
-        y = draw_block(d, y, post["headline_en"], font("NotoSans.ttf", 48, "SemiBold"), GREY, width, 1.25, 3)
-    else:
-        y = draw_block(d, y, post["headline_en"], font("NotoSans.ttf", 76), WHITE, width, 1.2, 4)
-
-    y += 40
-    d.rectangle([PAD, y, PAD + 120, y + 8], fill=ACCENT)
-    y += 50
-
-    pf = font("NotoSans.ttf", 38, "Regular")
-    for p in post["points_en"][:3]:
-        if y > H - 300:
+    # headline: biggest size that fits in 4 lines, left of the rings
+    hw = 730
+    for size in (88, 80, 72, 64, 58):
+        hf = font("NotoSans.ttf", size, "ExtraBold")
+        lines = wrap(d, post["headline_en"], hf, hw)
+        if len(lines) <= 4:
             break
-        d.ellipse([PAD, y + 16, PAD + 14, y + 30], fill=ACCENT)
-        lines = wrap(d, p, pf, width - 40)[:2]
-        for ln in lines:
-            d.text((PAD + 36, y), ln, font=pf, fill=WHITE)
-            y += 52
-        y += 18
+    lines = lines[:4]
+    y = 205
+    for ln in lines:
+        d.text((PAD, y), ln, font=hf, fill=t["ink"])
+        y += int(size * 1.12)
+    head_end = y
+
+    # points: anchored to the bottom, above the footer
+    pf = font("NotoSans.ttf", 32, "Regular")
+    blocks = [wrap(d, p, pf, W - 2 * PAD - 50)[:2] for p in post["points_en"][:3]]
+    lh, gap = 44, 24
+    total = sum(len(b) * lh for b in blocks) + gap * (len(blocks) - 1)
+    y = max(head_end + 70, 1130 - total)
+    for b in blocks:
+        if y + len(b) * lh > 1160:
+            break
+        cy = y + 23
+        d.ellipse([PAD, cy - 11, PAD + 22, cy + 11], outline=t["accent"], width=3)
+        d.ellipse([PAD + 6, cy - 5, PAD + 16, cy + 5], fill=t["accent"])
+        for ln in b:
+            d.text((PAD + 48, y), ln, font=pf, fill=t["ink"])
+            y += lh
+        y += gap
 
     # footer
-    d.line([PAD, H - 170, W - PAD, H - 170], fill=(50, 62, 85), width=2)
-    sf = font("NotoSans.ttf", 32, "Regular")
-    d.text((PAD, H - 140), f"Source: {post['story']['source']}", font=sf, fill=GREY)
-    hf = font("NotoSans.ttf", 40)
-    d.text((PAD, H - 92), config.HANDLE, font=hf, fill=WHITE)
-    follow = "Follow for daily Nepal news"
-    d.text((W - PAD - d.textlength(follow, font=sf), H - 86), follow, font=sf, fill=GREY)
+    d.line([PAD, 1212, W - PAD, 1212], fill=t["rule"], width=2)
+    sf = font("NotoSans.ttf", 24, "Regular")
+    d.text((PAD, 1240), f"Source: {post['story']['source']}", font=sf, fill=t["muted"])
+    hf = font("NotoSans.ttf", 27)
+    d.text((W - PAD - d.textlength(config.HANDLE, font=hf), 1237), config.HANDLE, font=hf, fill=t["ink"])
 
     img.save(path, "JPEG", quality=92)
     return path
