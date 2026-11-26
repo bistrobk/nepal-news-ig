@@ -1,4 +1,4 @@
-"""Instagram API (Instagram Login): publish images and Reels, refresh token, read insights."""
+"""Instagram Graph API (Facebook Login for Business): publish images and Reels, read insights."""
 import os
 import time
 
@@ -65,14 +65,6 @@ def post_reel(video_path, caption, video_url=None):
         cid = j["id"]
     _wait(cid)
     return _publish(cid)
-
-
-def refresh_token():
-    """Long-lived tokens last 60 days; refreshing gives a fresh 60 days."""
-    j = _check(requests.get("https://graph.instagram.com/refresh_access_token",
-                            params={"grant_type": "ig_refresh_token",
-                                    "access_token": config.IG_TOKEN}, timeout=30))
-    return j["access_token"], j.get("expires_in")
 
 
 def recent_insights(limit=70):

@@ -16,7 +16,8 @@ MODEL = os.environ.get("CLAUDE_MODEL") or "claude-opus-5-5"  # cheaper: claude-h
 
 IG_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "")
 IG_USER_ID = os.environ.get("IG_USER_ID", "")
-IG_API = "https://graph.instagram.com/v23.0"
+# Facebook Login for Business (system-user token, does not expire) -> graph.facebook.com
+IG_API = "https://graph.facebook.com/v23.0"
 
 # Public URL base for media files (raw GitHub, repo must be public)
 REPO = os.environ.get("GITHUB_REPOSITORY", "")

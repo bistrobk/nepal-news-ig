@@ -4,7 +4,6 @@ python -m bot.main prepare [--reel]   pick a story, draw media, write state/pend
 python -m bot.main publish            post what prepare made, record it in state/posted.json
 python -m bot.main dry-run [--reel]   prepare only, nothing is saved to state
 python -m bot.main cleanup            delete media files older than KEEP_MEDIA_DAYS
-python -m bot.main refresh            print a refreshed token (workflow saves it as a secret)
 python -m bot.main report             write state/report.md from Instagram insights
 """
 import json
@@ -89,15 +88,6 @@ def cleanup():
             print(f"deleted {f.name}")
 
 
-def refresh():
-    from . import publish as ig
-    token, expires = ig.refresh_token()
-    print(f"::add-mask::{token}")
-    with open("new_token.txt", "w") as f:
-        f.write(token)
-    print(f"Token refreshed, expires in {int(expires or 0) // 86400} days")
-
-
 def report():
     from . import publish as ig
     rows = ig.recent_insights()
@@ -134,8 +124,6 @@ if __name__ == "__main__":
         publish()
     elif cmd == "cleanup":
         cleanup()
-    elif cmd == "refresh":
-        refresh()
     elif cmd == "report":
         report()
     else:
