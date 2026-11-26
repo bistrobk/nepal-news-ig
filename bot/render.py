@@ -76,7 +76,7 @@ def rings(img, cx, cy, color, accent, scale=3):
 def card(post, path, theme=None):
     t = THEMES.get(theme or config.THEME, THEMES["navy"])
     img = Image.new("RGB", (W, H), t["bg"])
-    rings(img, 968, 352, t["rings"], t["accent"])
+    rings(img, 968, 400, t["rings"], t["accent"])
     d = ImageDraw.Draw(img)
 
     # top row: CATEGORY | date            brand
@@ -109,12 +109,11 @@ def card(post, path, theme=None):
         y += int(size * 1.12)
     head_end = y
 
-    # points: anchored to the bottom, above the footer
+    # points: right under the headline
     pf = font("NotoSans.ttf", 32, "Regular")
     blocks = [wrap(d, p, pf, W - 2 * PAD - 50)[:2] for p in post["points_en"][:3]]
     lh, gap = 44, 24
-    total = sum(len(b) * lh for b in blocks) + gap * (len(blocks) - 1)
-    y = max(head_end + 70, 1130 - total)
+    y = head_end + 70
     for b in blocks:
         if y + len(b) * lh > 1160:
             break
