@@ -6,6 +6,7 @@ import re
 import time
 
 import feedparser
+import requests
 
 from . import config
 
@@ -50,3 +51,30 @@ def fresh_stories():
     stories.sort(key=lambda s: s["age_h"])
     print(f"{len(stories)} fresh stories")
     return stories[: config.CANDIDATES], posted
+
+
+OG = re.compile(r"<meta[^>]+(?:property|name)=[\"'](?:og:image|twitter:image)(?::src)?[\"'][^>]*>", re.I)
+
+
+def og_image(link, dest):
+    """Save the article's share photo (og:image) to dest. Returns dest or None."""
+    try:
+        ua = {"User-Agent": "Mozilla/5.0 (news-bot)"}
+        page = requests.get(link, timeout=15, headers=ua).text[:300000]
+        for tag in OG.findall(page):
+            m = re.search(r"content=[\"']([^\"']+)", tag)
+            if not m:
+                continue
+            url = html.unescape(m.group(1).strip())
+            if url.startswith("//"):
+                url = "https:" + url
+            r = requests.get(url, timeout=20, headers=ua)
+            if r.ok and len(r.content) > 15000 and r.headers.get("content-type", "image").startswith("image"):
+                dest.write_bytes(r.content)
+                from PIL import Image
+                with Image.open(dest) as im:
+                    if min(im.size) >= 300:
+                        return dest
+    except Exception as e:  # a missing photo must never stop a post
+        print(f"No photo: {e}")
+    return None

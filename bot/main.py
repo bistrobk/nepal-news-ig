@@ -8,6 +8,7 @@ python -m bot.main cleanup            delete media files older than KEEP_MEDIA_D
 python -m bot.main report             write state/report.md from Instagram insights
 """
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -44,7 +45,15 @@ def prepare(reel=False, save=True):
     post["image"] = img.name
     if reel:
         vid = config.MEDIA / f"{stamp}.mp4"
-        render.reel(img, vid)
+        photo = None
+        if os.environ.get("REEL_PHOTOS", "1") == "1" and post.get("story", {}).get("link"):
+            photo = fetch.og_image(post["story"]["link"], config.MEDIA / f"{stamp}-photo.jpg")
+        try:
+            from . import reel as motion
+            motion.make(post, photo, vid, theme)
+        except Exception as e:  # never lose the post: fall back to the still reel
+            print(f"Motion reel failed, using still: {e}")
+            render.reel(img, vid)
         post["video"] = vid.name
     print(f"Prepared: {post['headline_en']} ({post['story']['source']})")
     if save:
