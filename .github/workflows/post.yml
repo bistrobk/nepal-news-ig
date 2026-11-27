@@ -2,25 +2,11 @@ name: Post to Instagram
 
 on:
   schedule:
-    # UTC times. Nepal = UTC+5:45. One post every hour, 06:00-21:00 Nepal time (16 a day).
-    # Reels at 08:00, 18:00 and 21:00 Nepal time. Daily summary at 20:30 Nepal time (14:45 UTC).
-    - cron: '15 0 * * *'
-    - cron: '15 1 * * *'
-    - cron: '15 2 * * *'
-    - cron: '15 3 * * *'
-    - cron: '15 4 * * *'
-    - cron: '15 5 * * *'
-    - cron: '15 6 * * *'
-    - cron: '15 7 * * *'
-    - cron: '15 8 * * *'
-    - cron: '15 9 * * *'
-    - cron: '15 10 * * *'
-    - cron: '15 11 * * *'
-    - cron: '15 12 * * *'
-    - cron: '15 13 * * *'
-    - cron: '15 14 * * *'
-    - cron: '15 15 * * *'
-    - cron: '45 14 * * *'
+    # GitHub runs these late (often hours) and drops some, so we wake often and
+    # bot/when.py decides from the Nepal clock: one post per hour 06:00-21:00,
+    # Reels at 08, 18 and 21, the 'Today in Nepal' summary after 20:30, nothing at night.
+    # 00:05-16:45 UTC = 05:50-22:30 Nepal time. Avoids :00, GitHub's busiest minute.
+    - cron: '5,25,45 0-16 * * *'
   workflow_dispatch:
     inputs:
       reel:
@@ -50,32 +36,55 @@ jobs:
       IG_HANDLE: ${{ vars.IG_HANDLE }}
       IG_BRAND: ${{ vars.IG_BRAND }}
       CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
-      REEL: ${{ (github.event.schedule == '15 2 * * *' || github.event.schedule == '15 12 * * *' || github.event.schedule == '15 15 * * *' || inputs.reel) && '--reel' || '' }}
-      DIGEST: ${{ (github.event.schedule == '45 14 * * *' || inputs.digest) && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}  # latest commit, so a queued run sees the newest post log
+
+      - name: Decide what to post
+        id: when
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # manual run: always post, as asked
+            if [ "${{ inputs.digest }}" = "true" ]; then a=digest
+            elif [ "${{ inputs.reel }}" = "true" ]; then a=reel
+            else a=card; fi
+            echo "action=$a" >> "$GITHUB_OUTPUT"; echo "$a: manual run"
+          else
+            python3 -m bot.when
+          fi
 
       - name: Install system libraries
+        if: steps.when.outputs.action != 'skip'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libraqm0
 
       - uses: actions/setup-python@v5
+        if: steps.when.outputs.action != 'skip'
         with:
           python-version: '3.12'
           cache: pip
 
       - name: Install Python packages
+        if: steps.when.outputs.action != 'skip'
         run: pip install -r requirements.txt
 
       - name: Git identity
+        if: steps.when.outputs.action != 'skip'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Prepare post
+        if: steps.when.outputs.action != 'skip'
         run: |
-          if [ -n "$DIGEST" ]; then python -m bot.main digest; else python -m bot.main prepare $REEL; fi
+          case "${{ steps.when.outputs.action }}" in
+            digest) python -m bot.main digest ;;
+            reel)   python -m bot.main prepare --reel ;;
+            *)      python -m bot.main prepare ;;
+          esac
 
       - name: Upload media (so Instagram can fetch it)
+        if: steps.when.outputs.action != 'skip'
         run: |
           git add media state
           if git diff --cached --quiet; then echo "Nothing to upload"; exit 0; fi
@@ -84,14 +93,15 @@ jobs:
           sleep 20
 
       - name: Publish
+        if: steps.when.outputs.action != 'skip'
         run: python -m bot.main publish
 
       - name: Clean old media
-        if: always()
+        if: always() && steps.when.outputs.action != 'skip'
         run: python -m bot.main cleanup
 
       - name: Save state
-        if: always()
+        if: always() && steps.when.outputs.action != 'skip'
         run: |
           git add -A media state
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi

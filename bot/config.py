@@ -1,6 +1,9 @@
 """Settings. Secrets come from environment variables (GitHub secrets in CI)."""
 import os
+from datetime import timedelta, timezone
 from pathlib import Path
+
+NPT = timezone(timedelta(hours=5, minutes=45))  # Nepal time
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "state"

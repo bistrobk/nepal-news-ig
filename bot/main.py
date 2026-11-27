@@ -10,11 +10,11 @@ python -m bot.main report             write state/report.md from Instagram insig
 import json
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from . import config, fetch, render
 
-NPT = timezone(timedelta(hours=5, minutes=45))  # Nepal time
+NPT = config.NPT
 
 
 def caption_text(post):
