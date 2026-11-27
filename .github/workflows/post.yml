@@ -79,7 +79,7 @@ jobs:
         run: |
           git add media state
           if git diff --cached --quiet; then echo "Nothing to upload"; exit 0; fi
-          git commit -q -m "media: $(date -u +%Y%m%d-%H%M)"
+          git commit -q -m "media: $(TZ=Asia/Kathmandu date +%Y%m%d-%H%M)"
           git pull -q --rebase && git push -q
           sleep 20
 
@@ -95,5 +95,5 @@ jobs:
         run: |
           git add -A media state
           if git diff --cached --quiet; then echo "No changes"; exit 0; fi
-          git commit -q -m "state: $(date -u +%Y%m%d-%H%M)"
+          git commit -q -m "state: $(TZ=Asia/Kathmandu date +%Y%m%d-%H%M)"
           git pull -q --rebase && git push -q

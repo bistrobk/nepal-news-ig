@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 
 from . import config, fetch, render
 
+NPT = timezone(timedelta(hours=5, minutes=45))  # Nepal time
+
 
 def caption_text(post):
     tags = " ".join(f"#{h}" for h in post["hashtags"])
@@ -30,7 +32,7 @@ def prepare(reel=False, save=True):
     if not post:
         return None
     config.MEDIA.mkdir(exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    stamp = datetime.now(NPT).strftime("%Y%m%d-%H%M")
     img = config.MEDIA / f"{stamp}.jpg"
     theme = config.THEME
     if theme == "topic":  # hard news on navy, lighter topics on light
@@ -56,10 +58,9 @@ def prepare(reel=False, save=True):
 def digest(save=True):
     """Evening 'Today in Nepal' card from what was posted earlier today (Nepal date)."""
     from .summarize import write_digest
-    npt = timezone(timedelta(hours=5, minutes=45))
-    today = datetime.now(npt).date()
+    today = datetime.now(NPT).date()
     todays = [p for p in fetch.load_posted()
-              if datetime.fromisoformat(p["time"]).astimezone(npt).date() == today]
+              if datetime.fromisoformat(p["time"]).astimezone(NPT).date() == today]
     if any(p.get("type") == "digest" for p in todays):
         print("Summary already posted today")
         return None
@@ -72,7 +73,7 @@ def digest(save=True):
         print("No summary this run")
         return None
     config.MEDIA.mkdir(exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    stamp = datetime.now(NPT).strftime("%Y%m%d-%H%M")
     img = config.MEDIA / f"{stamp}.jpg"
     sources = len({p["source"] for p in entries})
     render.digest_card(out["items"], img, sources)
@@ -102,7 +103,7 @@ def publish():
         media_id = ig.post_image(f"{config.MEDIA_BASE}/{post['image']}", cap)
     posted = fetch.load_posted()
     posted.append({
-        "time": datetime.now(timezone.utc).isoformat(timespec="minutes"),
+        "time": datetime.now(NPT).isoformat(timespec="minutes"),
         "id": media_id,
         "type": post.get("type") or ("reel" if post.get("video") else "image"),
         "category": post["category"],
@@ -123,7 +124,7 @@ def cleanup():
         if not f.is_file() or f.name == ".gitkeep":
             continue
         try:
-            made = datetime.strptime(f.stem, "%Y%m%d-%H%M").replace(tzinfo=timezone.utc).timestamp()
+            made = datetime.strptime(f.stem, "%Y%m%d-%H%M").replace(tzinfo=NPT).timestamp()
         except ValueError:
             made = f.stat().st_mtime
         if made < cutoff:
@@ -136,7 +137,7 @@ def report():
     rows = ig.recent_insights()
     posted = {p["id"]: p for p in fetch.load_posted()}
     lines = ["# Weekly Instagram report", "",
-             f"Generated {datetime.now(timezone.utc):%Y-%m-%d}", "",
+             f"Generated {datetime.now(NPT):%Y-%m-%d} (Nepal time)", "",
              "| Date | Type | Category | Reach | Views | Likes | Comments | Saves | Shares | Headline |",
              "|---|---|---|---|---|---|---|---|---|---|"]
     by_cat = {}
