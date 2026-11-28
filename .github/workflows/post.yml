@@ -7,6 +7,10 @@ on:
     # Reels at 08, 18 and 21, the 'Today in Nepal' summary after 20:30, nothing at night.
     # 00:05-16:45 UTC = 05:50-22:30 Nepal time. Avoids :00, GitHub's busiest minute.
     - cron: '5,25,45 0-16 * * *'
+  # Backup wake-up that does not depend on GitHub's timer: a Claude cloud
+  # scheduled task pushes an empty commit to this branch every hour.
+  push:
+    branches: ['claude/tick']
   workflow_dispatch:
     inputs:
       reel:
@@ -39,7 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}  # latest commit, so a queued run sees the newest post log
+          # latest commit, so a queued run sees the newest post log; tick pushes post from main
+          ref: ${{ github.event_name == 'push' && 'main' || github.ref_name }}
 
       - name: Decide what to post
         id: when
