@@ -26,7 +26,8 @@ IG_API = "https://graph.facebook.com/v23.0"
 
 # Public URL base for media files (raw GitHub, repo must be public)
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
-BRANCH = os.environ.get("GITHUB_REF_NAME", "main")
+# push runs come from the claude/tick branch, but media is pushed to main
+BRANCH = "main" if os.environ.get("GITHUB_EVENT_NAME") == "push" else os.environ.get("GITHUB_REF_NAME", "main")
 MEDIA_BASE = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/media"
 
 FEEDS = {
